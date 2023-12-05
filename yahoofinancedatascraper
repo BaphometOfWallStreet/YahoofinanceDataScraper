@@ -13,6 +13,22 @@ def map_sentiment_to_trend(sentiment):
     else:
         return "Sell"
 
+def get_after_hours_price(ticker):
+    try:
+        # Get after-hours price using yfinance
+        stock = yf.Ticker(ticker)
+        after_hours_data = stock.history(period="1d", interval="1m", prepost=True)
+        
+        if not after_hours_data.empty:
+            # The last row contains the most recent after-hours price
+            after_hours_price = after_hours_data.iloc[-1]["Close"]
+            return after_hours_price
+
+    except Exception as e:
+        print(f"Error fetching after-hours price: {e}")
+
+    return None
+
 def get_stock_info(ticker):
     try:
         # Capitalize the ticker
@@ -22,50 +38,23 @@ def get_stock_info(ticker):
         stock_info = yf.Ticker(ticker).info
         company_name = stock_info.get('longName', '')
 
-        # Get current price and after-hours price using yfinance
+        # Get current price using yfinance
         stock = yf.Ticker(ticker)
 
         # Check if the stock information is available
         if stock.info:
             current_price = stock.history(period="1mo")["Close"].iloc[-1]  # Change the period to "1mo" for 1 month
 
-            # Check if after-hours price is available
-            after_hours_price = stock.info.get('postMarketPrice', 'N/A')
-            if after_hours_price == 'N/A':
-                print("After-Hours Price: Not available")
-            else:
-                print(f"After-Hours Price: {after_hours_price}")
+            # Get after-hours price
+            after_hours_price = get_after_hours_price(ticker)
 
-            # Get recent news from Yahoo Finance using yfinance
-            news = stock.news
+            # Display information
+            print(f"Stock Ticker: {ticker}")
+            print(f"Company Name: {company_name}")
+            print(f"Current Price: {current_price}")
+            print(f"After-Hours Price: {after_hours_price if after_hours_price is not None else 'N/A'}")
 
-            # Extract relevant terms from the stock's description and company name as keywords
-            stock_keywords = [str(keyword).lower() for keyword in (ticker, *company_name.split())]
-
-            # Filter news headlines containing stock-specific keywords
-            news_headlines = [headline['title'] for headline in news[:10] if any(keyword in str(headline['title']).lower() for keyword in stock_keywords)]
-
-            # Perform sentiment analysis on the filtered news headlines
-            analyzer = SentimentIntensityAnalyzer()
-            sentiments = [analyzer.polarity_scores(str(headline))["compound"] for headline in news_headlines]
-
-            # Check if there are sentiments before calculating the average
-            if sentiments:
-                average_sentiment = sum(sentiments) / len(sentiments)
-
-                # Map sentiment score to trend category
-                trend = map_sentiment_to_trend(average_sentiment)
-
-                # Display information
-                print(f"Stock Ticker: {ticker}")
-                print(f"Company Name: {company_name}")
-                print(f"Current Price: {current_price}")
-                print(f"Analyst Recommendation: {trend}")
-                print("\nRecent News:")
-                for i, headline in enumerate(news_headlines, 1):
-                    print(f"{i}. {headline}")
-            else:
-                print("No matching news headlines found.")
+            # ... (rest of the code)
 
         else:
             print(f"Error: No data found for {ticker}. The symbol may be delisted or unavailable.")
