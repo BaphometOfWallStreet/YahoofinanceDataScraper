@@ -4,7 +4,8 @@ from datetime import datetime
 import warnings
 from newsapi import NewsApiClient
 
-# This was made by Teo!
+# This was made by Teo! {READ THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!}
+#JUST ENTER IN THE STOCK TICKER U WOULD LIKE AND IT DOES THE REST FOR YAH!
 
 # Suppress FutureWarnings from the pandas library
 warnings.simplefilter(action='ignore', category=FutureWarning)
