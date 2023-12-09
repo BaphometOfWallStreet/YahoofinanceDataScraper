@@ -1,24 +1,336 @@
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import yfinance as yf
+import ta
+from datetime import datetime
+import warnings
+from newsapi import NewsApiClient
 
-def map_sentiment_to_trend(sentiment):
-    if sentiment >= 0.2:
-        return "Strong Buy"
-    elif 0.1 <= sentiment < 0.2:
-        return "Buy"
-    elif -0.1 <= sentiment < 0.1:
-        return "Hold"
-    elif -0.2 <= sentiment < -0.1:
-        return "Under-perform"
+# This was made by Teo!
+
+# Suppress FutureWarnings from the pandas library
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# Replace these with your actual API keys
+NEWS_API_KEY = 'ENTER YOUR API KEY FROM NEWS API'
+
+def fetch_technical_indicators(symbol, start_date, end_date):
+    historical_data = fetch_yahoo_finance_data(symbol, start_date, end_date)
+    indicators = calculate_technical_indicators(historical_data)
+    return indicators
+
+def fetch_yahoo_finance_data(symbol, start_date, end_date):
+    data = yf.download(symbol, start=start_date, end=end_date)
+    return data
+
+
+
+def calculate_technical_indicators(history):
+    rsi = ta.momentum.RSIIndicator(close=history['Close']).rsi()
+    macd = ta.trend.MACD(close=history['Close']).macd()
+    bollinger_bands = ta.volatility.BollingerBands(close=history['Close']).bollinger_hband_indicator()
+    cci = ta.trend.CCIIndicator(high=history['High'], low=history['Low'], close=history['Close']).cci()
+    ema_50 = ta.trend.EMAIndicator(close=history['Close'], window=50).ema_indicator()
+    sma_200 = ta.trend.SMAIndicator(close=history['Close'], window=200).sma_indicator()
+    atr = ta.volatility.AverageTrueRange(high=history['High'], low=history['Low'], close=history['Close']).average_true_range()
+    adx = ta.trend.ADXIndicator(high=history['High'], low=history['Low'], close=history['Close']).adx()
+    mfi = ta.volume.MFIIndicator(high=history['High'], low=history['Low'], close=history['Close'], volume=history['Volume']).money_flow_index()
+    obv = ta.volume.OnBalanceVolumeIndicator(close=history['Close'], volume=history['Volume']).on_balance_volume()
+    roc = ta.momentum.ROCIndicator(close=history['Close']).roc()
+    stoch = ta.momentum.StochasticOscillator(high=history['High'], low=history['Low'], close=history['Close']).stoch()
+    williams_r = ta.momentum.WilliamsRIndicator(high=history['High'], low=history['Low'], close=history['Close']).williams_r()
+
+    # Calculate Aroon values directly from High and Low
+    aroon_periods = 14
+    aroon_up = 100 * (history['High'].rolling(window=aroon_periods).apply(lambda x: x.argmax(), raw=True) / (aroon_periods - 1))
+    aroon_down = 100 * (history['Low'].rolling(window=aroon_periods).apply(lambda x: x.argmin(), raw=True) / (aroon_periods - 1))
+
+    # Ultimate Oscillator
+    ultimate_oscillator = ta.momentum.UltimateOscillator(high=history['High'], low=history['Low'], close=history['Close']).ultimate_oscillator()
+
+    # Keltner Channel
+    keltner_channel = ta.volatility.KeltnerChannel(high=history['High'], low=history['Low'], close=history['Close'])
+    keltner_channel_upper = keltner_channel.keltner_channel_hband()
+    keltner_channel_lower = keltner_channel.keltner_channel_lband()
+    keltner_channel_central = (keltner_channel_upper + keltner_channel_lower) / 2
+
+    # Additional Indicators
+    mass_index = ta.trend.MassIndex(high=history['High'], low=history['Low']).mass_index()
+    cmf = ta.volume.ChaikinMoneyFlowIndicator(high=history['High'], low=history['Low'], close=history['Close'], volume=history['Volume']).chaikin_money_flow()
+    trix = ta.trend.TRIXIndicator(close=history['Close']).trix()
+    vwma = ta.volume.VolumeWeightedAveragePrice(high=history['High'], low=history['Low'], close=history['Close'], volume=history['Volume']).volume_weighted_average_price()
+    ichimoku = ta.trend.IchimokuIndicator(high=history['High'], low=history['Low']).ichimoku_base_line()
+    kc_width = keltner_channel_upper - keltner_channel_lower
+
+    return {
+        'RSI': rsi,
+        'MACD': macd,
+        'BollingerBands': bollinger_bands,
+        'CCI': cci,
+        'EMA_50': ema_50,
+        'SMA_200': sma_200,
+        'ATR': atr,
+        'ADX': adx,
+        'MFI': mfi,
+        'OBV': obv,
+        'ROC': roc,
+        'Stoch': stoch,
+        'Williams_R': williams_r,
+        'Aroon_Up': aroon_up,
+        'Aroon_Down': aroon_down,
+        'Ultimate_Oscillator': ultimate_oscillator,
+        'Keltner_Channel': keltner_channel_central,
+        'Mass_Index': mass_index,
+        'CMF': cmf,
+        'TRIX': trix,
+        'VWAP': vwma,
+        'Ichimoku': ichimoku,
+        'Keltner_Channel_Width': kc_width,
+        'Mass_Index': mass_index,
+        'CMF': cmf,
+        'TRIX': trix,
+        'VWAP': vwma,
+        'Ichimoku': ichimoku,
+        'Keltner_Channel_Width': kc_width,
+        # Add more indicators here
+    }
+
+def get_yahoo_finance_indicators(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        history = stock.history(period="1d", interval="1m")
+        indicators = calculate_technical_indicators(history)
+
+        # Extract the latest values
+        latest_values = {indicator: value.iloc[-1] if not value.empty else None for indicator, value in indicators.items()}
+
+        # Remove indicators with None values
+        latest_values = {indicator: value for indicator, value in latest_values.items() if value is not None}
+
+        # Convert values to float
+        latest_values = {indicator: float(value) for indicator, value in latest_values.items()}
+
+        return latest_values
+
+    except Exception as e:
+        print(f"Error fetching technical indicators from Yahoo Finance: {e}")
+        return {}
+
+    except Exception as e:
+        print(f"Error fetching technical indicators from Yahoo Finance: {e}")
+
+    return {}
+
+def analyze_sentiment(indicators):
+    # Example rules, you can customize based on your analysis
+    required_indicators = [
+        'RSI', 'MACD', 'BollingerBands', 'CCI', 'EMA_50', 'SMA_200',
+        'ATR', 'ADX', 'MFI', 'OBV', 'ROC', 'Stoch', 'Williams_R', 'Aroon_Up', 'Aroon_Down',
+        'Ultimate_Oscillator', 'Keltner_Channel', 'Mass_Index', 'CMF',
+        'TRIX', 'VWAP', 'Ichimoku', 'Keltner_Channel_Width'
+        # Add more indicators here
+    ]
+
+    if all(indicators.get(indicator) is not None for indicator in required_indicators):
+        buy_votes, sell_votes, hold_votes = 0, 0, 0  # Initialize votes counters
+
+        # Customize threshold for each indicator
+        buy_votes += 1 if indicators['RSI'] < 30 else 0
+        sell_votes += 1 if indicators['RSI'] > 70 else 0
+        hold_votes += 1 if 30 <= indicators['RSI'] <= 70 else 0
+
+        buy_votes += 1 if indicators['MACD'] > 0.02 else 0
+        sell_votes += 1 if indicators['MACD'] < -0.02 else 0
+        hold_votes += 1 if -0.02 <= indicators['MACD'] <= 0.02 else 0
+
+        buy_votes += 1 if indicators['BollingerBands'] < -2 else 0
+        sell_votes += 1 if indicators['BollingerBands'] > 2 else 0
+        hold_votes += 1 if -2 <= indicators['BollingerBands'] <= 2 else 0
+
+        buy_votes += 1 if indicators['CCI'] < -50 else 0
+        sell_votes += 1 if indicators['CCI'] > 50 else 0
+        hold_votes += 1 if -50 <= indicators['CCI'] <= 50 else 0
+
+        buy_votes += 1 if indicators['EMA_50'] > 350 else 0
+        sell_votes += 1 if indicators['EMA_50'] < 175 else 0
+        hold_votes += 1 if 175 <= indicators['EMA_50'] <= 350 else 0
+
+        buy_votes += 1 if indicators['SMA_200'] > 300 else 0
+        sell_votes += 1 if indicators['SMA_200'] < 175 else 0
+        hold_votes += 1 if 175 <= indicators['SMA_200'] <= 300 else 0
+
+        buy_votes += 1 if indicators['ATR'] > 0.5 else 0
+        sell_votes += 1 if indicators['ATR'] < -0.5 else 0
+        hold_votes += 1 if -0.5 <= indicators['ATR'] <= 0.5 else 0
+
+        buy_votes += 1 if indicators['ADX'] > 20 else 0
+        sell_votes += 1 if indicators['ADX'] < 15 else 0
+        hold_votes += 1 if 15 <= indicators['ADX'] <= 20 else 0
+
+        buy_votes += 1 if indicators['MFI'] > 40 else 0
+        sell_votes += 1 if indicators['MFI'] < 60 else 0
+        hold_votes += 1 if 40 <= indicators['MFI'] <= 60 else 0
+
+        buy_votes += 1 if indicators['OBV'] > 1000000 else 0
+        sell_votes += 1 if indicators['OBV'] < -1000000 else 0
+        hold_votes += 1 if -1000000 <= indicators['OBV'] <= 1000000 else 0
+
+        buy_votes += 1 if indicators['ROC'] > 0 else 0
+        sell_votes += 1 if indicators['ROC'] < -0.1 else 0
+        hold_votes += 1 if -0.1 <= indicators['ROC'] <= 0 else 0
+
+        buy_votes += 1 if indicators['Stoch'] > 30 else 0
+        sell_votes += 1 if indicators['Stoch'] < 70 else 0
+        hold_votes += 1 if 30 <= indicators['Stoch'] <= 70 else 0
+
+        buy_votes += 1 if indicators['Williams_R'] < -70 else 0
+        sell_votes += 1 if indicators['Williams_R'] > -30 else 0
+        hold_votes += 1 if -70 <= indicators['Williams_R'] <= -30 else 0
+
+        buy_votes += 1 if indicators['Aroon_Up'] > 60 else 0
+        sell_votes += 1 if indicators['Aroon_Up'] < 40 else 0
+        hold_votes += 1 if 40 <= indicators['Aroon_Up'] <= 60 else 0
+
+        buy_votes += 1 if indicators['Aroon_Down'] > 60 else 0
+        sell_votes += 1 if indicators['Aroon_Down'] < 40 else 0
+        hold_votes += 1 if 40 <= indicators['Aroon_Down'] <= 60 else 0
+
+        buy_votes += 1 if indicators['Ultimate_Oscillator'] > 45 else 0
+        sell_votes += 1 if indicators['Ultimate_Oscillator'] < 55 else 0
+        hold_votes += 1 if 45 <= indicators['Ultimate_Oscillator'] <= 55 else 0
+
+        buy_votes += 1 if indicators['Keltner_Channel'] > 0.5 else 0
+        sell_votes += 1 if indicators['Keltner_Channel'] < -0.5 else 0
+        hold_votes += 1 if -0.5 <= indicators['Keltner_Channel'] <= 0.5 else 0
+
+        buy_votes += 1 if indicators['Mass_Index'] > 5 else 0
+        sell_votes += 1 if indicators['Mass_Index'] < -5 else 0
+        hold_votes += 1 if -5 <= indicators['Mass_Index'] <= 5 else 0
+
+        buy_votes += 1 if indicators['CMF'] > 0.05 else 0
+        sell_votes += 1 if indicators['CMF'] < -0.05 else 0
+        hold_votes += 1 if -0.05 <= indicators['CMF'] <= 0.05 else 0
+
+        buy_votes += 1 if indicators['TRIX'] > 0.02 else 0
+        sell_votes += 1 if indicators['TRIX'] < -0.02 else 0
+        hold_votes += 1 if -0.02 <= indicators['TRIX'] <= 0.02 else 0
+
+        buy_votes += 1 if indicators['VWAP'] > 350 else 0
+        sell_votes += 1 if indicators['VWAP'] < 270 else 0
+        hold_votes += 1 if 270 <= indicators['VWAP'] <= 350 else 0
+
+        buy_votes += 1 if indicators['Ichimoku'] > 0.2 else 0
+        sell_votes += 1 if indicators['Ichimoku'] < -0.2 else 0
+        hold_votes += 1 if -0.2 <= indicators['Ichimoku'] <= 0.2 else 0
+
+        buy_votes += 1 if indicators['Keltner_Channel_Width'] > 0.05 else 0
+        sell_votes += 1 if indicators['Keltner_Channel_Width'] < -0.05 else 0
+        hold_votes += 1 if -0.05 <= indicators['Keltner_Channel_Width'] <= 0.05 else 0
+
+        # Sum up the votes
+        total_votes = buy_votes + sell_votes + hold_votes
+
+        if total_votes > 23:
+            # Normalize votes to maintain the proportion
+            buy_votes = int(buy_votes / total_votes * 23)
+            sell_votes = int(sell_votes / total_votes * 23)
+            hold_votes = 23 - buy_votes - sell_votes
+
+        # Adjust the threshold based on the total number of votes
+        threshold = max(2, int(total_votes * 0.4))  # 40% of total votes as the threshold
+
+        # Use this section to customize the number of votes required for Buy/Sell/Hold
+        if buy_votes >= threshold:
+            sentiment = "Buy"
+            color_code = '\033[32m'  # Dark Green
+        elif sell_votes >= threshold:
+            sentiment = "Sell"
+            color_code = '\033[91m'  # Red
+        elif hold_votes >= threshold:
+            sentiment = "Hold"
+            color_code = '\033[94m'  # Blue
+        else:
+            sentiment = "Hold"  # Default to Hold if the threshold is not met
+            color_code = '\033[94m'  # Blue
+
+        print(f"Sentiment: {color_code}{sentiment} ({buy_votes} Buy, {sell_votes} Sell, {hold_votes} Hold)\033[0m")
+        return sentiment, color_code
+
+    print("Insufficient data for analysis.")
+    return "Hold", '\033[94m'  # Default to Hold if there is
+
+
+def get_news_api_headlines(ticker, company_name):
+    try:
+        # Initialize News API client with your actual API key
+        newsapi = NewsApiClient(api_key=NEWS_API_KEY)
+
+        # Combine the ticker and company name in the search query
+        query = f"{ticker} {company_name}"
+
+        # Search for news headlines related to the query from News API
+        response = newsapi.get_everything(q=query, language='en', sort_by='publishedAt', page_size=5)
+
+        # Extract news headlines
+        articles = response.get('articles', [])
+        news_api_headlines = [article['title'] for article in articles]
+
+        return news_api_headlines
+
+    except Exception as e:
+        print(f"Error fetching News API headlines: {e}")
+        return []
+
+def display_stock_info(ticker, company_name, current_price, opening_price, after_hours_price=None, price_change=None):
+    print(f"\nStock Information for {ticker} - {company_name}")
+    print("-" * 50)
+
+    # Determine color for current price based on its relation to opening price
+    color_code = '\033[92m' if current_price > opening_price else ('\033[91m' if current_price < opening_price else '\033[94m')
+    print(f"Current Price: {color_code}${current_price:.2f}\033[0m")
+    print(f"Opening Price: ${opening_price:.2f}")
+
+    # Check if it's after 4 pm and before 9:30 am
+    current_time = datetime.now().time()
+    after_hours_allowed = current_time >= datetime.strptime("16:00", "%H:%M").time() or current_time < datetime.strptime("09:30", "%H:%M").time()
+
+    if after_hours_price is not None and after_hours_allowed:
+        color_code = '\033[91m' if price_change < 0 else '\033[92m'
+        print(f"After-Hours Price: {color_code}${after_hours_price:.2f}\033[0m")
+        print(f"After-Hours Price Change: {color_code}${price_change:.2f}\033[0m")
+    elif after_hours_price is not None:
+        print("After-Hours Price: N/A (Data available only after 4pm and before 9:30am)")
     else:
-        return "Sell"
+        print("After-Hours Price: N/A")
+
+
+def display_technical_indicators(indicators):
+    print("\nTechnical Indicators:")
+    print("-" * 50)
+    for indicator, value in indicators.items():
+        print(f"- {indicator}: {value:.2f}")
+
+def display_news_headlines(news_headlines, company_ticker, company_name):
+    print("\nRecent News Headlines (from News API):")
+    print("-" * 50)
+
+    # Ensure both company_ticker and company_name are strings
+    company_ticker = str(company_ticker)
+    company_name = str(company_name)
+
+    # Filter headlines based on the company ticker or name
+    filtered_headlines = [headline for headline in news_headlines if company_ticker in headline or company_name in headline]
+
+    if filtered_headlines:
+        for news_item in filtered_headlines:
+            print(f"- {news_item}")
+    else:
+        print("No relevant headlines found.")
 
 def get_after_hours_price(ticker):
     try:
         # Get after-hours price using yfinance
         stock = yf.Ticker(ticker)
         after_hours_data = stock.history(period="1d", interval="1m", prepost=True)
-        
+
         if not after_hours_data.empty:
             # The last row contains the most recent after-hours price
             after_hours_price = after_hours_data.iloc[-1]["Close"]
@@ -26,8 +338,6 @@ def get_after_hours_price(ticker):
 
     except Exception as e:
         print(f"Error fetching after-hours price: {e}")
-
-    return None
 
 def get_stock_info(ticker):
     try:
@@ -38,29 +348,76 @@ def get_stock_info(ticker):
         stock_info = yf.Ticker(ticker).info
         company_name = stock_info.get('longName', '')
 
-        # Get current price using yfinance
-        stock = yf.Ticker(ticker)
+        # Check if the company name is available
+        if company_name:
+            # Get current price using yfinance
+            stock = yf.Ticker(ticker)
+            current_price = stock.history(period="1mo")["Close"].iloc[-1]
 
-        # Check if the stock information is available
-        if stock.info:
-            current_price = stock.history(period="1mo")["Close"].iloc[-1]  # Change the period to "1mo" for 1 month
+            # Get opening price of the day
+            opening_price = stock.history(period="1d")["Open"].iloc[0]
 
-            # Get after-hours price
-            after_hours_price = get_after_hours_price(ticker)
+            # Get the current time
+            current_time = datetime.now().time()
 
-            # Display information
-            print(f"Stock Ticker: {ticker}")
-            print(f"Company Name: {company_name}")
-            print(f"Current Price: {current_price}")
-            print(f"After-Hours Price: {after_hours_price if after_hours_price is not None else 'N/A'}")
+            # Get after-hours price only after 4 pm and before 9:30 am
+            if current_time >= datetime.strptime("16:00", "%H:%M").time() or current_time < datetime.strptime("09:30", "%H:%M").time():
+                after_hours_price = get_after_hours_price(ticker)
+                price_change = after_hours_price - current_price if after_hours_price is not None else None
+            else:
+                after_hours_price = None
+                price_change = None
 
-            # ... (rest of the code)
+            # Display stock information
+            display_stock_info(ticker, company_name, current_price, opening_price, after_hours_price, price_change)
+
+            # Get technical indicators from Yahoo Finance
+            yahoo_finance_indicators = get_yahoo_finance_indicators(ticker)
+
+            # Display technical indicators from Yahoo Finance
+            display_technical_indicators(yahoo_finance_indicators)
+
+            # Sentiment analysis based on indicators
+            sentiment_result = analyze_sentiment(yahoo_finance_indicators)
+
+            # Get additional news headlines from News API only if both company name and ticker are defined
+            if company_name and ticker:
+                news_api_headlines = get_news_api_headlines(ticker, company_name)
+
+                # Display the most recent filtered news headlines from News API
+                display_news_headlines(news_api_headlines, ticker, company_name)
+
 
         else:
             print(f"Error: No data found for {ticker}. The symbol may be delisted or unavailable.")
 
     except Exception as e:
         print(f"Error: {e}")
+
+
+# Add this function to display after-hours information
+def display_stock_info(ticker, company_name, current_price, opening_price, after_hours_price=None, price_change=None):
+    print(f"\nStock Information for {ticker} - {company_name}")
+    print("-" * 50)
+
+    # Determine color for current price based on its relation to opening price
+    color_code = '\033[92m' if current_price > opening_price else ('\033[91m' if current_price < opening_price else '\033[94m')
+    print(f"Current Price: {color_code}${current_price:.2f}\033[0m")
+    print(f"Opening Price: ${opening_price:.2f}")
+
+    # Check if it's after 4pm and before 9:30am
+    current_time = datetime.now().time()
+    after_hours_allowed = current_time >= datetime.strptime("16:00", "%H:%M").time() or current_time < datetime.strptime("09:30", "%H:%M").time()
+
+    if after_hours_price is not None and after_hours_allowed:
+        color_code = '\033[91m' if price_change < 0 else '\033[92m'
+        print(f"After-Hours Price: {color_code}${after_hours_price:.2f}\033[0m")
+        print(f"After-Hours Price Change: {color_code}${price_change:.2f}\033[0m")
+    elif after_hours_price is not None:
+        print("After-Hours Price: N/A (Data available only after 4pm and before 9:30am)")
+    else:
+        print("After-Hours Price: N/A")
+
 
 if __name__ == "__main__":
     stock_ticker = input("Enter the stock ticker symbol: ")
